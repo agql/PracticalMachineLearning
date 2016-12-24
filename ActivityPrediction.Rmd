@@ -1,0 +1,113 @@
+---
+title: "Predicting Physical Activity Correctness"
+author: "Agustin González-Quel"
+date: "December, 24th 2016"
+output: html_document
+---
+
+# Predicting Physical Activity Correctness
+
+The goal of the project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. 
+
+This report is based on data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: (http://groupware.les.inf.puc-rio.br/har)
+
+## Required Libraries
+
+```{r}
+library(knitr)
+library(caret)
+library(randomForest)
+library(rattle)
+```
+
+## Data acquisition and cleaning
+
+We download the data to a local file to work with:
+
+```{r}
+trainFile <- "./pml-training.csv"
+testFile <- "./pml-testing.csv"
+trainingData <- read.csv(trainFile, na.strings=c("NA","#DIV/0!",""))
+testingData <- read.csv(testFile, na.strings=c("NA","#DIV/0!",""))
+dim(trainingData)
+dim(testingData)
+```
+
+Both the training data and test data contain 160 columns of information. We are going to clean the data. We will preserve the classe variable so it is not affected by the cleaning
+
+At this point we clean the data, removing near zero variance variables
+
+```{r}
+keepClasse <- trainingData$classe
+KeepProblemId <- testingData$problem_id
+nzIndex <- nearZeroVar(trainingData, saveMetrics=TRUE)
+trainingData <- trainingData[,nzIndex$nzv==FALSE]
+```
+
+Then we remove NA values and collumns that are not meaningful
+```{r}
+trainingData <- trainingData[, colSums(is.na(trainingData)) == 0] 
+toRemove <- grepl("^X|timestamp|window", names(trainingData))
+trainingData <- trainingData[, !toRemove]
+trainingData <- trainingData[, sapply(trainingData, is.numeric)]
+trainingData$classe <- keepClasse
+dim(trainingData)
+```
+
+And finally, the dataset has only 53 variables
+
+## Model selection and training
+
+We split the training data into train and validation sets
+
+```{r}
+set.seed(15767) # For reproducibile purpose
+trainSet <- createDataPartition(trainingData$classe, p=0.70, list=F)
+actualTrain <- trainingData[trainSet, ]
+actualValidate <- trainingData[-trainSet, ]
+```
+
+### Model based on Decision Tree algorithm
+
+```{r}
+modelDT <- train(classe ~., method="rpart", data = actualTrain )
+predictDT <- predict(modelDT, actualValidate)
+```
+
+We can have a look at the model graphically
+
+```{r}
+fancyRpartPlot(modelDT$finalModel)
+```
+
+And check the correctness of the model
+
+```{r}
+confusionMatrix(predictDT, actualValidate$classe)
+```
+
+### Model based on Random Forest
+
+```{r}
+modelRF <- randomForest(classe ~ ., data=actualTrain)
+predictRF <- predict(modelRF, actualValidate)
+```
+
+Using the Confusion Matrix we can check the correctness of the model
+
+```{r}
+confusionMatrix(predictRF, actualValidate$classe)
+```
+
+From this information, we conclude that Random Forest is most appropriate as the accuracy is greater than 99%
+
+## Generating results
+
+Using the model based on Random Forest we apply to the Test data set (testingData) in our study. 
+
+```{r}
+predictionOK <- predict(modelRF, testingData)
+```
+
+Inserting this data in the Quiz, it provides a 100% scoring
+
